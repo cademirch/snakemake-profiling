@@ -19,9 +19,9 @@ CONFIG_STR = f"samples={SAMPLES} reps={REPS}"
 
 SCENARIOS = [
     "fresh",
-    "resume25",
-    "resume50",
-    "resume75",
+    # "resume25",
+    # "resume50",
+    # "resume75",
     "codechange",
     "paramchange",
 ]
@@ -85,7 +85,7 @@ rule setup_resume:
         
         # Run to specified completion percentage
         echo "Running to {wildcards.percent}% completion with {wildcards.persistence_impl}..."
-        SNAKEMAKE_USE_LMDB_PERSISTENCE={params.use_lmdb} snakemake -s {params.workflow_file} --executor slurm -j 200 -d {params.run_dir} --config {params.config_str} multiplier={params.completion} -c {threads}
+        SNAKEMAKE_USE_LMDB_PERSISTENCE={params.use_lmdb} snakemake -s {params.workflow_file} --executor slurm -j 200 -d {params.run_dir} --config {params.config_str} multiplier={params.completion}
         
         # Mark setup as done
         echo "Setup completed _resume{wildcards.percent}_{wildcards.persistence_impl} at $(date)" > {output}
@@ -144,8 +144,7 @@ rule setup_codechange:
         
         # Run workflow to completion using the copied file
         echo "Running workflow to completion for code change test with {wildcards.persistence_impl}..."
-        SNAKEMAKE_USE_LMDB_PERSISTENCE={params.use_lmdb} snakemake -s {params.run_dir}/Snakefile -d {params.run_dir} --config {params.config_str} -c {threads}
-        
+        SNAKEMAKE_USE_LMDB_PERSISTENCE={params.use_lmdb} snakemake -s {params.run_dir}/Snakefile -d {params.run_dir} --config {params.config_str} --executor slurm -j 200
         # Mark setup as done
         echo "Setup completed for codechange_{wildcards.persistence_impl} at $(date)" > {output}
         """
@@ -204,7 +203,7 @@ rule setup_paramchange:
         
         # Run workflow to completion with initial params
         echo "Running workflow to completion for param change test with {wildcards.persistence_impl}..."
-        SNAKEMAKE_USE_LMDB_PERSISTENCE={params.use_lmdb} snakemake -s {params.workflow_file} --executor slurm -j 200 -d {params.run_dir} --config {params.config_str} prefix=Initial -c {threads}
+        SNAKEMAKE_USE_LMDB_PERSISTENCE={params.use_lmdb} snakemake -s {params.workflow_file} --executor slurm -j 200 -d {params.run_dir} --config {params.config_str} prefix=Initial
         
         # Mark setup as done
         echo "Setup completed for paramchange_{wildcards.persistence_impl} at $(date)" > {output}
