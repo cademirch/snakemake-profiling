@@ -2,10 +2,10 @@
 import time
 import random
 
-# Configuration with defaults
-config.setdefault("samples", 30)
-config.setdefault("multiplier", 1.0)  # Float 0-1 for completion percentage
-config.setdefault("reps", 10)
+# Configuration with defaults (targeting ~210 jobs total)
+config.setdefault("samples", 10)  # 10 samples
+config.setdefault("multiplier", 1.0)  # Float 0-1 for completion percentage  
+config.setdefault("reps", 10)  # 10 reps -> 10*10 + 10*10 + 10 = 210 jobs total
 config.setdefault("prefix", "Processed")  # Parameter for testing param changes
 SAMPLES = [f"sample{i}" for i in range(config["samples"])]
 

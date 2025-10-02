@@ -10,7 +10,9 @@ version = "0.1.0"
 [dependencies]
 python = ">=3.13.5,<3.14"
 pip = ">=25.2,<26"
+pandas = ">=2.3.3,<3"
 
 [pypi-dependencies]
 pyinstrument = ">=5.0.3, <6"
 snakemake = {git = "https://github.com/snakemake/snakemake.git", branch = "feat/lmdb-persistence"}
+snakemake-executor-plugin-slurm = ">=1.8.0, <2"
