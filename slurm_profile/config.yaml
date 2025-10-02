@@ -1,6 +1,7 @@
 executor: slurm
 jobs: 200
-default_resources:
+
+default-resources:
   slurm_parition: "medium"
   runtime: 1440
   mem_mb: 8000
