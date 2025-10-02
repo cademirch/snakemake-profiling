@@ -6,19 +6,11 @@ platforms = ["osx-arm64", "linux-64", "osx-64"]
 version = "0.1.0"
 
 [tasks]
-profile-simple = { cmd = "pyinstrument -o simple.pyisession -m snakemake -s workflows/simple.smk -d workflows/output --quiet --cores all {{ '-n' if dryrun else '' }}", args = [
-    { arg = "dryrun", default = "" },
-] }
-profile-big = { cmd = "pyinstrument -o big.pyisession -m snakemake -s workflows/big.smk -d workflows/output --quiet --cores all {{ '-n' if dryrun else '' }}", args = [
-    { arg = "dryrun", default = "" },
-] }
-view-profile = { cmd = "pyinstrument -r html --load {{prof}}", args = ["prof"] }
-clean = { cmd = "rm -rf ./workflows/output" }
 
 [dependencies]
-snakemake = "*"
 python = ">=3.13.5,<3.14"
 pip = ">=25.2,<26"
 
 [pypi-dependencies]
 pyinstrument = ">=5.0.3, <6"
+snakemake = {git = "https://github.com/snakemake/snakemake.git", branch = "feat/lmdb-persistence"}
