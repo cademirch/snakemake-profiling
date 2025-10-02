@@ -1,0 +1,11 @@
+executor: slurm
+jobs: 200
+default_resources:
+  slurm_parition: "medium"
+  runtime: 1440
+  mem_mb: 8000
+
+set-threads:
+  setup_resume: 64
+  setup_paramchange: 64
+  setup_codechange: 64

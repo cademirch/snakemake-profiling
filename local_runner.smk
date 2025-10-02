@@ -28,20 +28,20 @@ PERSISTENCE_IMPL = ["lmdb", "json"]
 
 rule all:
     input:
-        "dag_profiling_summary.csv",
+        f"dag_profiling_summary_{TOTAL_JOBS}jobs.csv",
 
 
 rule profile_fresh:
     """Profile fresh DAG building"""
     output:
-        "results/fresh_{persistence_impl}_done.txt",
+        temp("results/fresh_{persistence_impl}_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="fresh_{persistence_impl}",
         use_lmdb=lambda w: "1" if w.persistence_impl == "lmdb" else "0",
         config_str=CONFIG_STR,
     benchmark:
-        "benchmarks/{persistence_impl}/fresh.txt"
+        repeat("benchmarks/{persistence_impl}/fresh.txt", 5)
     log:
         "logs/fresh_{persistence_impl}_profile.log",
     shell:
@@ -64,7 +64,7 @@ rule profile_fresh:
 rule setup_resume:
     """Setup workflow to partial completion for resume testing"""
     output:
-        "setup/resume{percent}_{persistence_impl}_setup_done.txt",
+        temp("setup/resume{percent}_{persistence_impl}_setup_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="resume{percent}_{persistence_impl}",
@@ -95,14 +95,14 @@ rule profile_resume:
     input:
         "setup/resume{percent}_{persistence_impl}_setup_done.txt",
     output:
-        "results/resume{percent}_{persistence_impl}_done.txt",
+        temp("results/resume{percent}_{persistence_impl}_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="resume{percent}_{persistence_impl}",
         use_lmdb=lambda w: "1" if w.persistence_impl == "lmdb" else "0",
         config_str=CONFIG_STR,
     benchmark:
-        "benchmarks/{persistence_impl}/resume{percent}.txt"
+        repeat("benchmarks/{persistence_impl}/resume{percent}.txt", 5)
     log:
         "logs/resume{percent}_{persistence_impl}_profile.log",
     shell:
@@ -121,7 +121,7 @@ rule profile_resume:
 rule setup_codechange:
     """Setup workflow to completion, then modify code for testing code change detection"""
     output:
-        "setup/codechange_{persistence_impl}_setup_done.txt",
+        temp("setup/codechange_{persistence_impl}_setup_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="codechange_{persistence_impl}",
@@ -154,14 +154,14 @@ rule profile_codechange:
     input:
         "setup/codechange_{persistence_impl}_setup_done.txt",
     output:
-        "results/codechange_{persistence_impl}_done.txt",
+        temp("results/codechange_{persistence_impl}_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="codechange_{persistence_impl}",
         use_lmdb=lambda w: "1" if w.persistence_impl == "lmdb" else "0",
         config_str=CONFIG_STR,
     benchmark:
-        "benchmarks/{persistence_impl}/codechange.txt"
+        repeat("benchmarks/{persistence_impl}/codechange.txt", 5)
     log:
         "logs/codechange_{persistence_impl}_profile.log",
     shell:
@@ -184,7 +184,7 @@ rule profile_codechange:
 rule setup_paramchange:
     """Setup workflow to completion for testing param change detection"""
     output:
-        "setup/paramchange_{persistence_impl}_setup_done.txt",
+        temp("setup/paramchange_{persistence_impl}_setup_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="paramchange_{persistence_impl}",
@@ -214,14 +214,14 @@ rule profile_paramchange:
     input:
         "setup/paramchange_{persistence_impl}_setup_done.txt",
     output:
-        "results/paramchange_{persistence_impl}_done.txt",
+        temp("results/paramchange_{persistence_impl}_done.txt"),
     params:
         workflow_file=str(Path(workflow.basedir, "workflows/Snakefile")),
         run_dir="paramchange_{persistence_impl}",
         use_lmdb=lambda w: "1" if w.persistence_impl == "lmdb" else "0",
         config_str=CONFIG_STR,
     benchmark:
-        "benchmarks/{persistence_impl}/paramchange.txt"
+        repeat("benchmarks/{persistence_impl}/paramchange.txt", 5)
     log:
         "logs/paramchange_{persistence_impl}_profile.log",
     shell:
@@ -247,10 +247,10 @@ rule collect_benchmarks:
                scenario=SCENARIOS,
                persistence_impl=PERSISTENCE_IMPL)
     output:
-        "dag_profiling_summary.csv"
+        f"dag_profiling_summary_{TOTAL_JOBS}jobs.csv"
     run:
-        
-        
+
+
         results = []
         for persistence_impl in PERSISTENCE_IMPL:
             for scenario in SCENARIOS:
@@ -258,19 +258,20 @@ rule collect_benchmarks:
                 if Path(benchmark_file).exists():
                     # Read benchmark data (format: s	h:m:s	max_rss	max_vms	max_uss	max_pss	io_in	io_out	mean_load	cpu_time)
                     with open(benchmark_file) as f:
-                        next(f)
-                        line = f.readline().strip()
-                        if line:
-                            parts = line.split('\t')
-                            if len(parts) >= 1:
-                                runtime = float(parts[0])  # Runtime in seconds
-                                results.append({
-                                    'persistence_impl': persistence_impl,
-                                    'scenario': scenario,
-                                    'runtime': runtime,
-                                    'jobs': TOTAL_JOBS
-                                })
-        
+                        next(f)  # Skip header
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                parts = line.split('\t')
+                                if len(parts) >= 1:
+                                    runtime = float(parts[0])  # Runtime in seconds
+                                    results.append({
+                                        'persistence_impl': persistence_impl,
+                                        'scenario': scenario,
+                                        'runtime': runtime,
+                                        'jobs': TOTAL_JOBS
+                                    })
+
         df = pd.DataFrame(results)
         df.to_csv(output[0], index=False)
         print(f"Collected {len(results)} benchmark results into {output[0]}")
