@@ -1,3 +1,4 @@
+#fanout
 N_SAMPLES = config.get("n_samples", 20)
 N_REPLICATES = config.get("n_replicates", 5)
 N_BATCHES = config.get("n_batches", 3)

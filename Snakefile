@@ -7,16 +7,41 @@ import matplotlib.pyplot as plt
 
 WORKFLOWS = ["linear", "diamond", "fanout"]
 PERSISTENCE = ["json", "lmdb", "lmdb_mtime"]
-SCENARIOS = ["no_change", "param_change", "code_change"]
+SCENARIOS = ["no_change", "param_change", "code_change", "resume_25", "resume_50", "resume_75"]
+
+# Configuration for workflow sizes - only n_samples is common across all workflows
+N_SAMPLES = 100  # Full size for most scenarios
+
+# Resume scenarios: run to X% completion, then dry-run full workflow
+RESUME_PERCENTAGES = {
+    "resume_25": 0.25,
+    "resume_50": 0.50,
+    "resume_75": 0.75,
+}
+
+
+def get_config_string(n_samples):
+    """Build --config string for n_samples."""
+    return f"--config n_samples={n_samples}"
+
+
+def get_resume_config(wildcards):
+    """Get config for resume scenario setup - run partial workflow."""
+    percentage = RESUME_PERCENTAGES[wildcards.scenario]
+    partial_samples = int(N_SAMPLES * percentage)
+    return get_config_string(partial_samples)
+
+
+def get_full_config(wildcards):
+    """Get config for full workflow runs."""
+    return get_config_string(N_SAMPLES)
 
 
 def parse_benchmarks(benchmarks, outcsv):
     """Parse all benchmark files and aggregate into a DataFrame."""
     records = []
     for bench_file in benchmarks:
-
         parts = Path(bench_file).parts[-3:]
-
         workflow = parts[0]
         persistence = parts[1]
         scenario = parts[2].replace(".txt", "")
@@ -32,7 +57,7 @@ def parse_benchmarks(benchmarks, outcsv):
         records.append(df)
 
     if not records:
-        print(f"No benchmark files found in {benchmark_dir}", file=sys.stderr)
+        print(f"No benchmark files found", file=sys.stderr)
         return None
 
     # Combine all benchmark data
@@ -46,19 +71,17 @@ def create_plots(df, outpath):
     import matplotlib
 
     matplotlib.use("agg")
-    # Set style
     sns.set_theme(style="whitegrid")
 
-    # Define color palette for workflows
     workflows = sorted(df["workflow"].unique())
     palette = dict(zip(workflows, sns.color_palette(n_colors=len(workflows))))
 
-    # Boxplots faceted by scenario with workflow markers
     g = sns.catplot(
         data=df,
         x="persistence",
         y="s",
         col="scenario",
+        col_wrap=3,
         kind="box",
         height=5,
         aspect=1.2,
@@ -77,9 +100,7 @@ def create_plots(df, outpath):
         size=8,
     )
 
-    # Add a single legend manually
     from matplotlib.patches import Patch
-
     legend_elements = [Patch(facecolor=palette[wf], label=wf) for wf in workflows]
     g.fig.legend(
         handles=legend_elements,
@@ -114,20 +135,11 @@ rule all:
 def get_persistence_env(wildcards):
     """Generate environment variable settings for persistence type."""
     if wildcards.persistence == "lmdb":
-        return (
-            "SNAKEMAKE_USE_LMDB_PERSISTENCE=1"
-            + " SNAKEMAKE_USE_LMDB_PERSISTENCE_MTIME=0"
-        )
+        return "SNAKEMAKE_USE_LMDB_PERSISTENCE=1 SNAKEMAKE_USE_LMDB_PERSISTENCE_MTIME=0"
     elif wildcards.persistence == "lmdb_mtime":
-        return (
-            "SNAKEMAKE_USE_LMDB_PERSISTENCE=1"
-            + " SNAKEMAKE_USE_LMDB_PERSISTENCE_MTIME=1"
-        )
+        return "SNAKEMAKE_USE_LMDB_PERSISTENCE=1 SNAKEMAKE_USE_LMDB_PERSISTENCE_MTIME=1"
     else:
-        return (
-            "SNAKEMAKE_USE_LMDB_PERSISTENCE=0"
-            + " SNAKEMAKE_USE_LMDB_PERSISTENCE_MTIME=0"
-        )
+        return "SNAKEMAKE_USE_LMDB_PERSISTENCE=0 SNAKEMAKE_USE_LMDB_PERSISTENCE_MTIME=0"
 
 
 # Setup metadata 'templates' by running workflows to completion
@@ -143,15 +155,41 @@ rule setup_template:
     params:
         outdir=subpath(output.wf, parent=True),
         env_vars=get_persistence_env,
+        config=get_full_config,
     shell:
         """
         exec > {log} 2>&1
         cp {input.wf} {output.wf}
-        {params.env_vars} snakemake -s {output.wf} -d {params.outdir} --cores {threads}
+        {params.env_vars} snakemake -s {output.wf} -d {params.outdir} {params.config} --cores {threads}
+        """
+
+
+# Special setup for resume scenarios - run to partial completion
+rule setup_resume_template:
+    input:
+        wf=str(Path(workflow.basedir, "workflows/{workflow}.smk")),
+    output:
+        wf="templates/{workflow}/{persistence}/{scenario}/Snakefile",
+        snkdir=directory("templates/{workflow}/{persistence}/{scenario}/.snakemake"),
+        result_dir=directory("templates/{workflow}/{persistence}/{scenario}/results"),
+    log:
+        "logs/setup_{workflow}/{persistence}/{scenario}.log",
+    params:
+        outdir=subpath(output.wf, parent=True),
+        env_vars=get_persistence_env,
+        config=get_resume_config,
+    wildcard_constraints:
+        scenario="resume_.*"
+    shell:
+        """
+        exec > {log} 2>&1
+        cp {input.wf} {output.wf}
+        {params.env_vars} snakemake -s {output.wf} -d {params.outdir} {params.config} --cores {threads}
         """
 
 
 rule prepare_test:
+    localrule: True
     input:
         wf="templates/{workflow}/{persistence}/Snakefile",
         snkdir="templates/{workflow}/{persistence}/.snakemake",
@@ -160,6 +198,28 @@ rule prepare_test:
         wf="test_runs/{workflow}/{persistence}/{scenario}/Snakefile",
         snkdir=directory("test_runs/{workflow}/{persistence}/{scenario}/.snakemake"),
         result_dir=directory("test_runs/{workflow}/{persistence}/{scenario}/results"),
+    wildcard_constraints:
+        scenario="(no_change|param_change|code_change)"
+    shell:
+        """
+        cp {input.wf} {output.wf}
+        cp -r {input.snkdir} {output.snkdir}
+        cp -r {input.result_dir} {output.result_dir}
+        """
+
+
+rule prepare_test_resume:
+    localrule: True
+    input:
+        wf="templates/{workflow}/{persistence}/{scenario}/Snakefile",
+        snkdir="templates/{workflow}/{persistence}/{scenario}/.snakemake",
+        result_dir="templates/{workflow}/{persistence}/{scenario}/results",
+    output:
+        wf="test_runs/{workflow}/{persistence}/{scenario}/Snakefile",
+        snkdir=directory("test_runs/{workflow}/{persistence}/{scenario}/.snakemake"),
+        result_dir=directory("test_runs/{workflow}/{persistence}/{scenario}/results"),
+    wildcard_constraints:
+        scenario="resume_.*"
     shell:
         """
         cp {input.wf} {output.wf}
@@ -179,6 +239,7 @@ rule profile_codechange:
     params:
         outdir=subpath(input.wf, parent=True),
         env_vars=get_persistence_env,
+        config=get_full_config,
         snake_cli_extra="--rerun-triggers code",
     benchmark:
         repeat("benchmarks/{workflow}/{persistence}/code_change.txt", 10)
@@ -187,8 +248,8 @@ rule profile_codechange:
     shell:
         """
         exec > {log} 2>&1
-        sed 's/# EXTRACT_COMMENT: Initial data extraction step/# modified/' {input.wf} > {input.wf}.tmp && mv {input.wf}.tmp {input.wf}
-        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.snake_cli_extra} --dry-run
+        sed -i.bak 's/# EXTRACT_COMMENT: Initial data extraction step/# modified/' {input.wf}
+        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} {params.snake_cli_extra} --dry-run --cores 1
         touch {output.done}
         """
 
@@ -204,7 +265,8 @@ rule profile_param_change:
     params:
         outdir=subpath(input.wf, parent=True),
         env_vars=get_persistence_env,
-        snake_cli_extra="--config extract_method='changed' --rerun-triggers params",
+        config=lambda w: get_config_string(N_SAMPLES) + " --config extract_method='changed'",
+        snake_cli_extra="--rerun-triggers params",
     benchmark:
         repeat("benchmarks/{workflow}/{persistence}/param_change.txt", 10)
     log:
@@ -212,7 +274,7 @@ rule profile_param_change:
     shell:
         """
         exec > {log} 2>&1
-        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.snake_cli_extra} --dry-run
+        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} {params.snake_cli_extra} --dry-run --cores 1
         touch {output.done}
         """
 
@@ -228,7 +290,7 @@ rule profile_no_change:
     params:
         outdir=subpath(output.done, parent=True),
         env_vars=get_persistence_env,
-        snake_cli_extra="",
+        config=get_full_config,
     benchmark:
         repeat("benchmarks/{workflow}/{persistence}/no_change.txt", 10)
     log:
@@ -236,6 +298,33 @@ rule profile_no_change:
     shell:
         """
         exec > {log} 2>&1
-        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.snake_cli_extra} --dry-run
+        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} --dry-run --cores 1
+        touch {output.done}
+        """
+
+
+rule profile_resume:
+    """
+    Profile DAG building when resuming from partial completion
+    Template was run to X% completion, now dry-run full workflow
+    """
+    input:
+        wf="test_runs/{workflow}/{persistence}/{scenario}/Snakefile",
+    output:
+        done="test_runs/{workflow}/{persistence}/{scenario}/.done",
+    params:
+        outdir=subpath(input.wf, parent=True),
+        env_vars=get_persistence_env,
+        config=get_full_config,  # Full size for benchmark
+    wildcard_constraints:
+        scenario="resume_.*"
+    benchmark:
+        repeat("benchmarks/{workflow}/{persistence}/{scenario}.txt", 10)
+    log:
+        "logs/profile/{workflow}/{persistence}/{scenario}.log",
+    shell:
+        """
+        exec > {log} 2>&1
+        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} --dry-run --cores 1
         touch {output.done}
         """

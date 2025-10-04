@@ -3,4 +3,8 @@ jobs: 200
 
 default-resources:
   slurm_parition: "short"
-  runtime: 10
+  runtime: 60
+  mem_mb: 8000
+
+set-threads:
+  setup_template: 64

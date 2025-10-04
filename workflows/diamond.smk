@@ -1,3 +1,4 @@
+#diamond
 N_SAMPLES = config.get("n_samples", 10)
 SAMPLES = [f"sample_{i:03d}" for i in range(N_SAMPLES)]
 GROUPS = ["groupA", "groupB"]
