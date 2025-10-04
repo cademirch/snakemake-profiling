@@ -10,7 +10,7 @@ PERSISTENCE = ["json", "lmdb", "lmdb_mtime"]
 SCENARIOS = ["no_change", "param_change", "code_change", "resume_25", "resume_50", "resume_75"]
 
 # Configuration for workflow sizes - only n_samples is common across all workflows
-N_SAMPLES = 100  # Full size for most scenarios
+N_SAMPLES = config.get("n_samples", 100)  # Full size for most scenarios
 
 # Resume scenarios: run to X% completion, then dry-run full workflow
 RESUME_PERCENTAGES = {
