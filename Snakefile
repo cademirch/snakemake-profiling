@@ -111,7 +111,9 @@ def create_plots(df, outpath):
 
     g.set_axis_labels("Persistence Type", "Runtime (seconds)")
     g.set_titles("{col_name}")
+    g.set(yscale="log")
     plt.tight_layout()
+    
     plt.savefig(outpath, dpi=300)
     plt.close()
 
