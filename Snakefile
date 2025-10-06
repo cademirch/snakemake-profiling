@@ -305,7 +305,7 @@ rule profile_param_change:
         """
         exec > {log} 2>&1
         RANDOM_VALUE=$RANDOM
-        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} extract_method="$RANDOM" {params.snake_cli_extra} --dry-run --cores 1
+        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} extract_method="$RANDOM_VALUE" {params.snake_cli_extra} --dry-run --cores 1
         touch {output.done}
         """
 
