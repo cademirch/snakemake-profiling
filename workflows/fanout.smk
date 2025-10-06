@@ -24,7 +24,7 @@ rule extract:
         format=config.get("extract_format", "raw"),
     shell:
         """
-        # PREPARE_COMMENT: Initialize dataset for processing
+        # EXTRACT_COMMENT: Initialize dataset for processing
         touch {output}
         """
 

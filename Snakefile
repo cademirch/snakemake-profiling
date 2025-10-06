@@ -39,6 +39,9 @@ def get_full_config(wildcards):
 
 def parse_benchmarks(benchmarks, outcsv):
     """Parse all benchmark files and aggregate into a DataFrame."""
+    import re
+    import sys
+
     records = []
     for bench_file in benchmarks:
         parts = Path(bench_file).parts[-3:]
@@ -53,6 +56,19 @@ def parse_benchmarks(benchmarks, outcsv):
         df["workflow"] = workflow
         df["persistence"] = persistence
         df["scenario"] = scenario
+
+        # Try to read corresponding log file to extract job count
+        log_file = bench_file.replace("benchmarks/", "logs/profile/").replace(".txt", ".log")
+        total_jobs = None
+        if os.path.exists(log_file):
+            with open(log_file, 'r') as f:
+                log_content = f.read()
+                # Look for "total" line in job stats
+                match = re.search(r'^total\s+(\d+)$', log_content, re.MULTILINE)
+                if match:
+                    total_jobs = int(match.group(1))
+
+        df["total_jobs"] = total_jobs
 
         records.append(df)
 
@@ -101,6 +117,7 @@ def create_plots(df, outpath):
     )
 
     from matplotlib.patches import Patch
+
     legend_elements = [Patch(facecolor=palette[wf], label=wf) for wf in workflows]
     g.fig.legend(
         handles=legend_elements,
@@ -113,7 +130,7 @@ def create_plots(df, outpath):
     g.set_titles("{col_name}")
     g.set(yscale="log")
     plt.tight_layout()
-    
+
     plt.savefig(outpath, dpi=300)
     plt.close()
 
@@ -181,7 +198,7 @@ rule setup_resume_template:
         env_vars=get_persistence_env,
         config=get_resume_config,
     wildcard_constraints:
-        scenario="resume_.*"
+        scenario="resume_.*",
     shell:
         """
         exec > {log} 2>&1
@@ -201,7 +218,7 @@ rule prepare_test:
         snkdir=directory("test_runs/{workflow}/{persistence}/{scenario}/.snakemake"),
         result_dir=directory("test_runs/{workflow}/{persistence}/{scenario}/results"),
     wildcard_constraints:
-        scenario="(no_change|param_change|code_change)"
+        scenario="(no_change|param_change|code_change)",
     shell:
         """
         cp {input.wf} {output.wf}
@@ -221,7 +238,7 @@ rule prepare_test_resume:
         snkdir=directory("test_runs/{workflow}/{persistence}/{scenario}/.snakemake"),
         result_dir=directory("test_runs/{workflow}/{persistence}/{scenario}/results"),
     wildcard_constraints:
-        scenario="resume_.*"
+        scenario="resume_.*",
     shell:
         """
         cp {input.wf} {output.wf}
@@ -250,8 +267,9 @@ rule profile_codechange:
     shell:
         """
         exec > {log} 2>&1
-        sed -i.bak 's/# EXTRACT_COMMENT: Initial data extraction step/# modified/' {input.wf}
-        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} {params.snake_cli_extra} --dry-run --cores 1
+        sed 's/# EXTRACT_COMMENT: /# modified/' {input.wf} > {input.wf}.tmp
+        {params.env_vars} snakemake -s {input.wf}.tmp -d {params.outdir} {params.config} {params.snake_cli_extra} --dry-run --cores 1
+        rm {input.wf}.tmp
         touch {output.done}
         """
 
@@ -267,7 +285,8 @@ rule profile_param_change:
     params:
         outdir=subpath(input.wf, parent=True),
         env_vars=get_persistence_env,
-        config=lambda w: get_config_string(N_SAMPLES) + " --config extract_method='changed'",
+        config=lambda w: get_config_string(N_SAMPLES)
+        + " --config extract_method='changed'",
         snake_cli_extra="--rerun-triggers params",
     benchmark:
         repeat("benchmarks/{workflow}/{persistence}/param_change.txt", 10)
@@ -319,7 +338,7 @@ rule profile_resume:
         env_vars=get_persistence_env,
         config=get_full_config,  # Full size for benchmark
     wildcard_constraints:
-        scenario="resume_.*"
+        scenario="resume_.*",
     benchmark:
         repeat("benchmarks/{workflow}/{persistence}/{scenario}.txt", 10)
     log:
