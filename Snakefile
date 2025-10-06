@@ -5,9 +5,16 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-WORKFLOWS = ["linear", "diamond", "fanout"]
+WORKFLOWS = ["linear", "fanout", "diamond"]
 PERSISTENCE = ["json", "lmdb", "lmdb_mtime"]
-SCENARIOS = ["no_change", "param_change", "code_change", "resume_25", "resume_50", "resume_75"]
+SCENARIOS = [
+    "fresh_run",
+    "param_change",
+    "code_change",
+    "resume_25",
+    "resume_50",
+    "resume_75",
+]
 
 # Configuration for workflow sizes - only n_samples is common across all workflows
 N_SAMPLES = config.get("n_samples", 100)  # Full size for most scenarios
@@ -58,13 +65,15 @@ def parse_benchmarks(benchmarks, outcsv):
         df["scenario"] = scenario
 
         # Try to read corresponding log file to extract job count
-        log_file = bench_file.replace("benchmarks/", "logs/profile/").replace(".txt", ".log")
+        log_file = bench_file.replace("benchmarks/", "logs/profile/").replace(
+            ".txt", ".log"
+        )
         total_jobs = None
         if os.path.exists(log_file):
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 log_content = f.read()
                 # Look for "total" line in job stats
-                match = re.search(r'^total\s+(\d+)$', log_content, re.MULTILINE)
+                match = re.search(r"^total\s+(\d+)$", log_content, re.MULTILINE)
                 if match:
                     total_jobs = int(match.group(1))
 
@@ -218,7 +227,7 @@ rule prepare_test:
         snkdir=directory("test_runs/{workflow}/{persistence}/{scenario}/.snakemake"),
         result_dir=directory("test_runs/{workflow}/{persistence}/{scenario}/results"),
     wildcard_constraints:
-        scenario="(no_change|param_change|code_change)",
+        scenario="(fresh_run|param_change|code_change)",
     shell:
         """
         cp {input.wf} {output.wf}
@@ -267,7 +276,8 @@ rule profile_codechange:
     shell:
         """
         exec > {log} 2>&1
-        sed 's/# EXTRACT_COMMENT: /# modified/' {input.wf} > {input.wf}.tmp
+        RANDOM_VALUE=$RANDOM
+        sed "s/# EXTRACT_COMMENT: /# modified $RANDOM_VALUE/" {input.wf} > {input.wf}.tmp
         {params.env_vars} snakemake -s {input.wf}.tmp -d {params.outdir} {params.config} {params.snake_cli_extra} --dry-run --cores 1
         rm {input.wf}.tmp
         touch {output.done}
@@ -285,8 +295,7 @@ rule profile_param_change:
     params:
         outdir=subpath(input.wf, parent=True),
         env_vars=get_persistence_env,
-        config=lambda w: get_config_string(N_SAMPLES)
-        + " --config extract_method='changed'",
+        config=lambda w: get_config_string(N_SAMPLES),
         snake_cli_extra="--rerun-triggers params",
     benchmark:
         repeat("benchmarks/{workflow}/{persistence}/param_change.txt", 10)
@@ -295,27 +304,28 @@ rule profile_param_change:
     shell:
         """
         exec > {log} 2>&1
-        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} {params.snake_cli_extra} --dry-run --cores 1
+        RANDOM_VALUE=$RANDOM
+        {params.env_vars} snakemake -s {input.wf} -d {params.outdir} {params.config} extract_method="$RANDOM" {params.snake_cli_extra} --dry-run --cores 1
         touch {output.done}
         """
 
 
-rule profile_no_change:
+rule profile_fresh_run:
     """
     Benchmark fresh run
     """
     input:
         wf=str(Path(workflow.basedir, "workflows/{workflow}.smk")),
     output:
-        done="test_runs/{workflow}/{persistence}/no_change/.done",
+        done="test_runs/{workflow}/{persistence}/fresh_run/.done",
     params:
         outdir=subpath(output.done, parent=True),
         env_vars=get_persistence_env,
         config=get_full_config,
     benchmark:
-        repeat("benchmarks/{workflow}/{persistence}/no_change.txt", 10)
+        repeat("benchmarks/{workflow}/{persistence}/fresh_run.txt", 10)
     log:
-        "logs/profile/{workflow}/{persistence}/no_change.log",
+        "logs/profile/{workflow}/{persistence}/fresh_run.log",
     shell:
         """
         exec > {log} 2>&1

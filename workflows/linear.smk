@@ -1,8 +1,8 @@
 # workflows/linear.smk
 
 
-N_SAMPLES = config.get("n_samples", 20)
-SAMPLES = [f"sample_{i:03d}" for i in range(N_SAMPLES)]
+N_SAMPLES = config.get("n_samples")
+SAMPLES = [f"sample_{i}" for i in range(N_SAMPLES)]
 
 
 rule all:

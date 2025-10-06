@@ -1,9 +1,9 @@
 #fanout
-N_SAMPLES = config.get("n_samples", 20)
+N_SAMPLES = config.get("n_samples")
 N_REPLICATES = config.get("n_replicates", 5)
 N_BATCHES = config.get("n_batches", 3)
 
-SAMPLES = [f"sample_{i:03d}" for i in range(N_SAMPLES)]
+SAMPLES = [f"sample_{i}" for i in range(N_SAMPLES)]
 REPLICATES = [f"rep{i}" for i in range(N_REPLICATES)]
 BATCHES = [f"batch{i}" for i in range(N_BATCHES)]
 
